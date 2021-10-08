@@ -1,3 +1,4 @@
+import { FirebaseModule } from './models/firebase/firebase.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -5,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 import { OperationModule } from './models/operation';
+import { PushModule } from './models/push';
 
 @Module({
 	imports: [
@@ -14,6 +16,8 @@ import { OperationModule } from './models/operation';
 			isGlobal: true,
 		}),
 		OperationModule,
+		PushModule,
+		FirebaseModule,
 	],
 	controllers: [AppController],
 	providers: [AppService],
