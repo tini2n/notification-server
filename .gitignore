@@ -37,3 +37,4 @@ lerna-debug.log*
 
 # Project
 project-just-dev-firebase.json
+tmp/

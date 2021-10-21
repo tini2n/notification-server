@@ -1,13 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 
-import { DevToolService } from 'src/models/devtool';
+import * as fs from 'fs';
+import * as fse from 'fs-extra';
+import * as path from 'path';
+import { exec, execSync } from 'child_process';
+
 import { PushService } from 'src/models/push';
 import { FirebaseService } from 'src/models/firebase';
+
+import { Hibon } from 'src/models/hibon';
 
 import { PushSub, ParsedContract, ParsedInvoice, CheckContractResponse } from './index.dto';
 
 import { FirebaseMessageTypes } from 'src/models/firebase';
+
+// mocks
+import { UTIL_HIBON_PARSED } from 'src/common/constants/mocks';
 
 @Injectable()
 export class OperationService {
@@ -15,14 +24,13 @@ export class OperationService {
 	subs: { [key: string]: PushSub } = {}; // Hash of contract to sub
 
 	constructor(
-		private readonly devtoolService: DevToolService,
 		private readonly pushService: PushService,
 		private readonly firebaseService: FirebaseService,
 		private readonly logger: Logger,
 	) {}
 
 	async checkContract(contract: string, returnParsed = false) {
-		this.logger.debug(`ensureParsedContractSub(contract: ${contract}, returnParsed: ${returnParsed})`);
+		this.logger.debug(`checkContract(contract: ${contract}, returnParsed: ${returnParsed})`);
 
 		// await this.loadState();
 
@@ -34,13 +42,17 @@ export class OperationService {
 			console.error(error);
 		}
 
-		let inputsUsed = false;
-		let outputsUsed = false;
+		const response: CheckContractResponse = {
+			ok: false,
+			inputsUsed: false,
+			outputsUsed: false,
+			parsedContract,
+		};
 
 		for (let i = 0; i < parsedContract.in.length; i++) {
 			const key = parsedContract.in[i];
 			if (this.keys[key] !== undefined) {
-				inputsUsed = true;
+				response.inputsUsed = true;
 				break;
 			}
 		}
@@ -54,14 +66,13 @@ export class OperationService {
 					// Only say it's used if it's in the contract
 					// if it's subscribed as invoice - it's expected
 					if (this.subs[sub]?.contract) {
-						outputsUsed = true;
+						response.outputsUsed = true;
 						break;
 					}
 				}
 				break;
 			}
 		}
-		const response: CheckContractResponse = { ok: true, inputsUsed, outputsUsed, parsedContract: parsedContract };
 
 		if (!returnParsed) delete response.parsedContract;
 
@@ -70,7 +81,6 @@ export class OperationService {
 
 	async sendContract({ contract, deviceToken }: { contract: string; deviceToken: string }) {
 		this.logger.debug(`sendContract(contract: ${contract}, sub: ${deviceToken})`);
-		// await this.loadState();
 
 		const contractCheckResult = await this.checkContract(contract, true);
 
@@ -80,12 +90,18 @@ export class OperationService {
 		}
 
 		try {
-			const response = await this.devtoolService.sendHiRPC(
-				Buffer.from(contract, 'base64'),
-				// this.tagionwaveService.latestNetworkInfo.nodes[0].port,
-				3000, // mock tagionwave latestNetworkInfo node port
-			);
-			this.logger.log(response?.toString());
+			// todo: Buffer type
+			// const response = await this.devtoolService.sendHiRPC(
+			// 	Buffer.from(contract, 'base64'),
+			// 	// this.tagionwaveService.latestNetworkInfo.nodes[0].port,
+			// 	3000, // mock tagionwave latestNetworkInfo node port
+			// );
+			const response: Buffer = Buffer.from(contract, 'base64');
+			const resp = {
+				mockedResponse: 'somestring',
+			};
+
+			this.logger.log(resp?.toString());
 		} catch (error) {
 			return { ok: false, error };
 		}
@@ -99,7 +115,7 @@ export class OperationService {
 
 	async ensureParsedContractToken(parsedContract: ParsedContract, deviceToken: string) {
 		this.logger.debug(
-			`ensureParsedContractSub(parsedContract: ${JSON.stringify(parsedContract)}, sub: ${deviceToken})`,
+			`ensureParsedContractToken(parsedContract: ${JSON.stringify(parsedContract)}, deviceToken: ${deviceToken})`,
 		);
 		// await this.loadState();
 
@@ -154,7 +170,7 @@ export class OperationService {
 		}
 
 		// await this.saveState();
-		await this.notifyInvoiceSubAboutContractSent(parsedContract);
+		await this.notifyInvoiceTokenContractSent(parsedContract);
 
 		return { ok: true, existedBefore: false };
 	}
@@ -214,45 +230,33 @@ export class OperationService {
 	}
 
 	async parseContract(contractBase64: string) {
-		console.log(contractBase64);
 		try {
-			const jsonString = await this.devtoolService.hibonToJson(contractBase64);
-
-			if (!jsonString) {
-				throw new Error(`Couldn't convert to JSON`);
-			}
-
-			const json = JSON.parse(jsonString);
-
+			const contractBuffer = Buffer.from(contractBase64, 'base64');
 			const hash = this.caclHash(contractBase64);
-			const contract = json['$msg']['params']['$contract'];
 
-			const result: ParsedContract = {
-				in: [],
-				out: [],
+			const hibon = Hibon.construct(contractBuffer);
+			const hibonData = await hibon.data();
+
+			const { $contract: contract } = hibonData.message.params;
+
+			return {
+				in: contract.$in.map((value) => value[1]) as string[],
+				out: contract.$out.map((value) => value[1]) as string[],
 				contract: contractBase64,
 				hash,
-				amount: parseInt(contract['$script'].split(' ')[0]),
-			};
-			const inKeys = contract['$in'];
-			const outKeys = contract['$out'];
-
-			const inKeysPure = inKeys.map((value) => value[1]) as string[];
-			const outKeysPure = outKeys.map((value) => value[1]) as string[];
-
-			result.in = inKeysPure;
-			result.out = outKeysPure;
-
-			return result;
-		} catch (e) {
-			throw new Error(`Failed to parse contract: ${JSON.stringify(e)}`);
+				amount: parseInt(contract.$script.split(' ')[0]),
+			} as ParsedContract;
+		} catch (error) {
+			throw new Error(`Failed to parse contract: ${JSON.stringify(error)}`);
 		}
 	}
 
 	async parseInvoice(invoiceBase64: string) {
 		try {
-			const jsonString = await this.devtoolService.hibonToJson(invoiceBase64);
-			if (jsonString == false) {
+			// const jsonString = await this.devtoolService.hibonToJson(invoiceBase64);
+			const jsonString = 'somejsonstring';
+
+			if (!jsonString) {
 				throw `Couldn't convert to JSON`;
 			}
 			const json = JSON.parse(jsonString);
@@ -292,8 +296,8 @@ export class OperationService {
 		return shasum.digest('hex');
 	}
 
-	async notifyInvoiceSubAboutContractSent(parsedContract: ParsedContract) {
-		this.logger.debug(`notifyInvoiceSubAboutContractSent(parsedContract: ${JSON.stringify(parsedContract)})`);
+	async notifyInvoiceTokenContractSent(parsedContract: ParsedContract) {
+		this.logger.debug(`notifyInvoiceTokenContractSent(parsedContract: ${JSON.stringify(parsedContract)})`);
 
 		for (let i = 0; i < parsedContract.out.length; i++) {
 			const key = parsedContract.out[i];

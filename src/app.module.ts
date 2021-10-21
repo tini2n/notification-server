@@ -1,3 +1,4 @@
+import { HibonModule } from './models/hibon/hibon.module';
 import { FirebaseModule } from './models/firebase/firebase.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -15,6 +16,7 @@ import { PushModule } from './models/push';
 			ignoreEnvFile: process.env.NODE_ENV === 'production',
 			isGlobal: true,
 		}),
+		HibonModule,
 		OperationModule,
 		PushModule,
 		FirebaseModule,

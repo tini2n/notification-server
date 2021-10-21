@@ -4,3 +4,5 @@ export const FIREBASE_CREDS_FILE = 'project-just-dev-firebase.json';
 export const SSL_KEY = 'alice.key';
 export const SSL_CERT = 'alice.pem';
 export const SSL_CA = 'ca.pem';
+
+export * from './mocks';

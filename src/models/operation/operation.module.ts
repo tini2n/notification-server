@@ -1,6 +1,5 @@
 import { Module, Logger } from '@nestjs/common';
 
-import { DevToolModule } from 'src/models/devtool';
 import { PushModule } from 'src/models/push';
 import { FirebaseModule } from 'src/models/firebase';
 
@@ -8,7 +7,7 @@ import { OperationController } from './operation.controller';
 import { OperationService } from './operation.service';
 
 @Module({
-	imports: [DevToolModule, PushModule, FirebaseModule],
+	imports: [PushModule, FirebaseModule],
 	providers: [
 		OperationService,
 		{
