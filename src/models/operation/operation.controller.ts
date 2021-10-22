@@ -13,7 +13,7 @@ export class OperationController {
 		// if (!this.operationService.sessionAvailable) return this.operationService.sessionUnavailableError;
 
 		try {
-			return await this.operationService.checkContract(contract);
+			return await this.operationService.checkContract(contract, true);
 		} catch (error) {
 			return { ok: false, error: JSON.stringify(error) };
 		}

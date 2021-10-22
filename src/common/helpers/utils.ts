@@ -1,4 +1,5 @@
 import { exec } from 'child_process';
+import * as crypto from 'crypto';
 
 export const execPromise = async (command: string): Promise<string> => {
 	return new Promise((resolve, reject) => {
@@ -12,3 +13,11 @@ export const execPromise = async (command: string): Promise<string> => {
 		});
 	});
 };
+
+export  const caclHash = (value: Buffer) => {
+   const shasum = crypto.createHash('sha1');
+
+   shasum.update(value);
+
+   return shasum.digest('hex');
+}

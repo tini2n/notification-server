@@ -1,9 +1,11 @@
+import { Contract, HiBON } from 'src/models/hibon';
+
 export interface CheckContractResponse {
 	ok: boolean;
 	error?: string;
 	inputsUsed?: boolean;
 	outputsUsed?: boolean;
-	parsedContract?: ParsedContract;
+	parsedContract?: Contract;
 }
 
 export interface SendContractResponse {

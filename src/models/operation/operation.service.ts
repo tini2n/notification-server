@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
 
 import * as fs from 'fs';
 import * as fse from 'fs-extra';
@@ -9,7 +8,7 @@ import { exec, execSync } from 'child_process';
 import { PushService } from 'src/models/push';
 import { FirebaseService } from 'src/models/firebase';
 
-import { Hibon } from 'src/models/hibon';
+import { HiBON, Contract, Invoice } from 'src/models/hibon';
 
 import { PushSub, ParsedContract, ParsedInvoice, CheckContractResponse } from './index.dto';
 
@@ -34,16 +33,18 @@ export class OperationService {
 
 		// await this.loadState();
 
-		let parsedContract;
+		let parsedContract: Contract;
 
 		try {
-			parsedContract = await this.parseContract(contract);
+			const contractHiBON = await HiBON.constructByBase64(contract);
+
+			parsedContract = new Contract(contractHiBON);
 		} catch (error) {
 			console.error(error);
 		}
 
 		const response: CheckContractResponse = {
-			ok: false,
+			ok: true,
 			inputsUsed: false,
 			outputsUsed: false,
 			parsedContract,
@@ -86,6 +87,7 @@ export class OperationService {
 
 		if (contractCheckResult.inputsUsed || contractCheckResult.outputsUsed) {
 			contractCheckResult.ok = false;
+
 			return contractCheckResult;
 		}
 
@@ -113,7 +115,7 @@ export class OperationService {
 		return ensureSubResult;
 	}
 
-	async ensureParsedContractToken(parsedContract: ParsedContract, deviceToken: string) {
+	async ensureParsedContractToken(parsedContract: Contract, deviceToken: string) {
 		this.logger.debug(
 			`ensureParsedContractToken(parsedContract: ${JSON.stringify(parsedContract)}, deviceToken: ${deviceToken})`,
 		);
@@ -175,7 +177,7 @@ export class OperationService {
 		return { ok: true, existedBefore: false };
 	}
 
-	async ensureParsedInvoiceToken(parsedInvoice: ParsedInvoice, sub: string) {
+	async ensureParsedInvoiceToken(parsedInvoice: Invoice, sub: string) {
 		this.logger.debug(`ensureParsedContractSub(parsedInvoice: ${JSON.stringify(parsedInvoice)}, sub: ${sub})`);
 		// await this.loadState();
 
@@ -229,53 +231,11 @@ export class OperationService {
 		return { ok: true };
 	}
 
-	async parseContract(contractBase64: string) {
-		try {
-			const contractBuffer = Buffer.from(contractBase64, 'base64');
-			const hash = this.caclHash(contractBase64);
-
-			const hibon = Hibon.construct(contractBuffer);
-			const hibonData = await hibon.data();
-
-			const { $contract: contract } = hibonData.message.params;
-
-			return {
-				in: contract.$in.map((value) => value[1]) as string[],
-				out: contract.$out.map((value) => value[1]) as string[],
-				contract: contractBase64,
-				hash,
-				amount: parseInt(contract.$script.split(' ')[0]),
-			} as ParsedContract;
-		} catch (error) {
-			throw new Error(`Failed to parse contract: ${JSON.stringify(error)}`);
-		}
-	}
-
-	async parseInvoice(invoiceBase64: string) {
-		try {
-			// const jsonString = await this.devtoolService.hibonToJson(invoiceBase64);
-			const jsonString = 'somejsonstring';
-
-			if (!jsonString) {
-				throw `Couldn't convert to JSON`;
-			}
-			const json = JSON.parse(jsonString);
-
-			const parsedInvoice: ParsedInvoice = {
-				hash: this.caclHash(invoiceBase64),
-				invoice: invoiceBase64,
-				keys: [json[0]['pkey'][1]],
-			};
-			return parsedInvoice;
-		} catch (e) {
-			throw new Error(`Failed to parse invoice: ${JSON.stringify(e)}`);
-		}
-	}
-
 	async ensureContractToken(contract: string, deviceToken: string) {
 		this.logger.debug(`ensureContractSub(contract: ${contract}, sub: ${deviceToken})`);
 
-		const parsedContract = await this.parseContract(contract);
+		const contractHiBON = await HiBON.constructByBase64(contract),
+			parsedContract = new Contract(contractHiBON);
 
 		return this.ensureParsedContractToken(parsedContract, deviceToken);
 	}
@@ -283,20 +243,13 @@ export class OperationService {
 	async ensureInvoice(invoice: string, deviceToken: string) {
 		this.logger.debug(`ensureInvoiceSub(contract: ${invoice}, sub: ${deviceToken})`);
 
-		const parsedInvoice = await this.parseInvoice(invoice);
+		const invoiceHiBON = await HiBON.constructByBase64(invoice),
+			parsedInvoice = new Invoice(invoiceHiBON);
 
 		return this.ensureParsedInvoiceToken(parsedInvoice, deviceToken);
 	}
 
-	private caclHash(value: string) {
-		const shasum = crypto.createHash('sha1');
-
-		shasum.update(value);
-
-		return shasum.digest('hex');
-	}
-
-	async notifyInvoiceTokenContractSent(parsedContract: ParsedContract) {
+	async notifyInvoiceTokenContractSent(parsedContract: Contract) {
 		this.logger.debug(`notifyInvoiceTokenContractSent(parsedContract: ${JSON.stringify(parsedContract)})`);
 
 		for (let i = 0; i < parsedContract.out.length; i++) {

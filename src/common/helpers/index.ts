@@ -1,3 +1,3 @@
 export { timestamp } from './timestamp';
-export { execPromise } from './utils';
+export { execPromise, caclHash} from './utils';
 export { resolvePath, fileTemp } from './dirs';
