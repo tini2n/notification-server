@@ -47,35 +47,39 @@ export class OperationService {
 			ok: true,
 			inputsUsed: false,
 			outputsUsed: false,
-			parsedContract,
+			...(returnParsed && { parsedContract }),
 		};
 
-		for (let i = 0; i < parsedContract.in.length; i++) {
-			const key = parsedContract.in[i];
-			if (this.keys[key] !== undefined) {
-				response.inputsUsed = true;
-				break;
-			}
-		}
+		// todo: Preconfirmation. Notify about invoice
+		// for (let i = 0; i < parsedContract.in.length; i++) {
+		// 	const key = parsedContract.in[i];
 
-		for (let i = 0; i < parsedContract.out.length; i++) {
-			const key = parsedContract.out[i];
-			if (this.keys[key] !== undefined) {
-				const subs = this.keys[key];
-				for (let s = 0; s < subs.length; s++) {
-					const sub = subs[s];
-					// Only say it's used if it's in the contract
-					// if it's subscribed as invoice - it's expected
-					if (this.subs[sub]?.contract) {
-						response.outputsUsed = true;
-						break;
-					}
-				}
-				break;
-			}
-		}
+		// 	if (this.keys[key] !== undefined) {
+		// 		response.inputsUsed = true;
 
-		if (!returnParsed) delete response.parsedContract;
+		// 		break;
+		// 	}
+		// }
+
+		// for (let i = 0; i < parsedContract.out.length; i++) {
+		// 	const key = parsedContract.out[i];
+
+		// 	if (this.keys[key] !== undefined) {
+		// 		const subs = this.keys[key];
+
+		// 		for (let s = 0; s < subs.length; s++) {
+		// 			const sub = subs[s];
+
+		// 			// Only say it's used if it's in the contract
+		// 			// if it's subscribed as invoice - it's expected
+		// 			if (this.subs[sub]?.contract) {
+		// 				response.outputsUsed = true;
+		// 				break;
+		// 			}
+		// 		}
+		// 		break;
+		// 	}
+		// }
 
 		return response;
 	}
