@@ -36,9 +36,12 @@ export interface PushSub {
 export interface ParsedContract {
 	hash: string;
 	contract: string;
-	amount?: number;
+	amount: number;
+	keys: string[];
 	in: string[];
 	out: string[];
+	subscribers: string[];
+	expiration: string;
 }
 
 export interface ParsedInvoice {

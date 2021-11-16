@@ -5,6 +5,8 @@ import * as firebase from 'firebase-admin';
 
 import { FB_REALTIME_DB, FIREBASE_CREDS_FILE } from 'src/common/constants';
 
+import { Contract } from 'src/models/hibon/contract';
+
 import {
 	FirebaseContractPayload,
 	FirebaseInvoicePayload,
@@ -49,6 +51,10 @@ export class FirebaseService {
 		return await this.db.ref(`public-keys/${hash}/contracts`).set(payload);
 	}
 
+	async setPublicKeyInvoicesByHash(hash: string, payload: Array<string>) {
+		return await this.db.ref(`public-keys/${hash}/invoices`).set(payload);
+	}
+
 	async setPublicKeyByHash(hash: string, payload: { contracts?: Array<string>; invoices?: Array<string> }) {
 		return await this.db.ref(`public-keys/${hash}`).set(payload);
 	}
@@ -77,5 +83,11 @@ export class FirebaseService {
 
 	async setInvoiceSubscribersByHash(hash: string, payload: Array<string>) {
 		return await this.db.ref(`invoices/${hash}/subscribers`).set(payload);
+	}
+
+	async setInvoiceByHash(hash: string, payload) {
+		// todo: add model
+
+		return await this.db.ref(`invoices/${hash}`).set(payload);
 	}
 }

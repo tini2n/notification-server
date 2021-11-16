@@ -4,9 +4,12 @@ import { calcHash } from 'src/common/helpers';
 export class Contract {
 	in: string[];
 	out: string[];
+	keys?: string[];
 	contract: string;
 	hash: string;
 	amount: number;
+	subscribers?: string[];
+	expiration?: string[];
 
 	constructor(hibon: HiBON) {
 		const { $contract: contract } = hibon.data.message.params;
