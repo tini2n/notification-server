@@ -8,13 +8,13 @@ export class HiBON {
 
 	protected constructor(private _buffer: Buffer, private _data: any) {}
 
-	static async construct(buffer: Buffer) {
+	static async construct(buffer: Buffer): Promise<HiBON> {
 		const string = await HiBON.utilsProcessing(buffer);
 
 		const data = JSON.parse(string);
 		return new this(buffer, data);
 	}
-	static async constructByBase64(base64Str: string) {
+	static async constructByBase64(base64Str: string): Promise<HiBON> {
 		const buffer = Buffer.from(base64Str, 'base64');
 
 		return await HiBON.construct(buffer);

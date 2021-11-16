@@ -1,5 +1,5 @@
 import { HiBON } from '.';
-import { caclHash } from 'src/common/helpers';
+import { calcHash } from 'src/common/helpers';
 
 export class Contract {
 	in: string[];
@@ -15,8 +15,8 @@ export class Contract {
 			this.contract = hibon.base64;
 			this.in = contract.$in.map((value) => value[1]) as string[];
 			this.out = contract.$out.map((value) => value[1]) as string[];
-			this.hash = caclHash(hibon.buffer);
-			this.amount = parseInt(contract.$script.replace(/\D/g, ''));
+			this.hash = calcHash(hibon.buffer);
+			this.amount = parseInt(contract.$script.split(' ')[0]);
 		} catch (error) {
 			throw new Error(`Failed to parse contract: ${JSON.stringify(error)}`);
 		}

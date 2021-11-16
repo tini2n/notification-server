@@ -58,7 +58,7 @@ export class OperationController {
 		try {
 			const resolved = [];
 			for (let i = 0; i < body.invoices.length; i++) {
-				const response = await this.operationService.ensureInvoice(body.invoices[i], body.sub);
+				const response = await this.operationService.ensureInvoiceToken(body.invoices[i], body.sub);
 				if (response.resolved) resolved.push(response.resolved);
 			}
 

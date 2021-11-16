@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import * as fs from 'fs';
-import * as fse from 'fs-extra';
-import * as path from 'path';
-import { exec, execSync } from 'child_process';
+import { calcHash } from 'src/common/helpers';
 
 import { PushService } from 'src/models/push';
 import { FirebaseService } from 'src/models/firebase';
@@ -13,9 +10,6 @@ import { HiBON, Contract, Invoice } from 'src/models/hibon';
 import { PushSub, ParsedContract, ParsedInvoice, CheckContractResponse } from './index.dto';
 
 import { FirebaseMessageTypes } from 'src/models/firebase';
-
-// mocks
-import { UTIL_HIBON_PARSED } from 'src/common/constants/mocks';
 
 @Injectable()
 export class OperationService {
@@ -31,8 +25,6 @@ export class OperationService {
 	async checkContract(contract: string, returnParsed = false) {
 		this.logger.debug(`checkContract(contract: ${contract}, returnParsed: ${returnParsed})`);
 
-		// await this.loadState();
-
 		let parsedContract: Contract;
 
 		try {
@@ -40,7 +32,7 @@ export class OperationService {
 
 			parsedContract = new Contract(contractHiBON);
 		} catch (error) {
-			console.error(error);
+			console.error(JSON.stringify(error));
 		}
 
 		const response: CheckContractResponse = {
@@ -50,7 +42,19 @@ export class OperationService {
 			...(returnParsed && { parsedContract }),
 		};
 
+		for (let publicInput of parsedContract.in) {
+			const contractFromDb = await this.firebaseService.getPublicKeyByHash(publicInput);
+
+			if (contractFromDb.exists()) {
+				response.inputsUsed = true;
+
+				break;
+			}
+		}
+
 		// todo: Preconfirmation. Notify about invoice
+		// Check input output from DB
+
 		// for (let i = 0; i < parsedContract.in.length; i++) {
 		// 	const key = parsedContract.in[i];
 
@@ -60,6 +64,24 @@ export class OperationService {
 		// 		break;
 		// 	}
 		// }
+
+		for (let publicOutput of parsedContract.out) {
+			const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutput),
+				publicKey = await publicKeyFromDb.val();
+
+			if (publicKeyFromDb.exists()) {
+				for (let contractHash of publicKey.contracts) {
+					const contractFromDb = await this.firebaseService.getContractByHash(contractHash),
+						contractVal = await contractFromDb.val();
+
+					if (contractVal.contract) {
+						response.outputsUsed = true;
+
+						break;
+					}
+				}
+			}
+		}
 
 		// for (let i = 0; i < parsedContract.out.length; i++) {
 		// 	const key = parsedContract.out[i];
@@ -123,66 +145,73 @@ export class OperationService {
 		this.logger.debug(
 			`ensureParsedContractToken(parsedContract: ${JSON.stringify(parsedContract)}, deviceToken: ${deviceToken})`,
 		);
-		// await this.loadState();
-
-		let pushSub: PushSub;
 
 		// const sessionId = this.tagionwaveService.latestNetworkInfo?.sessionId;
 		const sessionId = '94a191fe-25bc-11ec-9621-0242ac130002'; // mock tagionwave latestNetworkInfo session id
 
 		if (!sessionId) return { ok: false };
 
-		// to-to: add notification interlayer service
-		const fromDb = await this.firebaseService.getContractByHash({ sessionId, hash: parsedContract.hash }); // todo: model of BD data ???
+		try {
+			const contractFromDb = await this.firebaseService.getContractByHash(parsedContract.hash),
+				contract = await contractFromDb.val();
 
-		if (fromDb.exists()) {
-			return { ok: true, resolved: { contract: parsedContract.hash, ...fromDb.val() } };
-		}
+			if (contractFromDb.exists()) {
+				if (!contract.subscribers.find(deviceToken)) {
+					await this.firebaseService.setContractSubscribersByHash(parsedContract.hash, [
+						...contract.subscribers,
+						deviceToken,
+					]);
 
-		if (this.subs[parsedContract.hash] !== undefined) {
-			pushSub = this.subs[parsedContract.hash];
-
-			if (pushSub.subs.indexOf(deviceToken) == -1) {
-				pushSub.subs.push(deviceToken);
-			}
-
-			// await this.saveState();
-			return { ok: true, existedBefore: true };
-		}
-
-		const expiration = new Date(Date.now() + 10 * 60000).toString();
-
-		pushSub = {
-			hash: parsedContract.hash,
-			contract: parsedContract.contract,
-			keys: [...parsedContract.in, ...parsedContract.out],
-			in: [...parsedContract.in],
-			out: [...parsedContract.out],
-			expiration,
-			subs: [deviceToken],
-		};
-
-		this.subs[pushSub.hash] = pushSub;
-
-		for (let i = 0; i < pushSub.keys.length; i++) {
-			const pushSubKey = pushSub.keys[i];
-			if (this.keys[pushSubKey] !== undefined) {
-				if (this.keys[pushSubKey].indexOf(pushSub.hash) == -1) {
-					this.keys[pushSubKey].push(pushSub.hash);
+					return { ok: true, existedBefore: true };
 				}
-			} else {
-				this.keys[pushSubKey] = [pushSub.hash];
+
+				return { ok: true, resolved: { contract: parsedContract.hash, ...contract } };
 			}
+		} catch (error) {
+			console.error(JSON.stringify(error));
 		}
 
-		// await this.saveState();
+		const contractKeys = [
+			...parsedContract.in.map((input) => calcHash(Buffer.from(input, 'base64'))),
+			...parsedContract.out.map((output) => calcHash(Buffer.from(output, 'base64'))),
+		];
+
+		await this.firebaseService.setContractByHash(parsedContract.hash, {
+			...parsedContract,
+			keys: contractKeys,
+			expiration: new Date(Date.now() + 10 * 60000).toString(),
+			subscribers: [deviceToken],
+		});
+
+		try {
+			for (let publicKey of contractKeys) {
+				const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicKey),
+					publicKeyValue = await publicKeyFromDb.val();
+
+				if (publicKeyFromDb.exists()) {
+					if (!publicKeyValue.contracts.find(parsedContract.hash)) {
+						await this.firebaseService.setPublicKeyContractsByHash(publicKey, [
+							...publicKeyValue.contracts,
+							parsedContract.hash,
+						]);
+					}
+				} else {
+					await this.firebaseService.setPublicKeyByHash(publicKey, { contracts: [parsedContract.hash] });
+				}
+			}
+		} catch (error) {
+			console.error(JSON.stringify(error));
+		}
+
 		await this.notifyInvoiceTokenContractSent(parsedContract);
 
 		return { ok: true, existedBefore: false };
 	}
 
-	async ensureParsedInvoiceToken(parsedInvoice: Invoice, sub: string) {
-		this.logger.debug(`ensureParsedContractSub(parsedInvoice: ${JSON.stringify(parsedInvoice)}, sub: ${sub})`);
+	async ensureParsedInvoiceToken(parsedInvoice: Invoice, deviceToken: string) {
+		this.logger.debug(
+			`ensureParsedContractSub(parsedInvoice: ${JSON.stringify(parsedInvoice)}, subscriber: ${deviceToken})`,
+		);
 		// await this.loadState();
 
 		let pushSub: PushSub;
@@ -192,21 +221,36 @@ export class OperationService {
 
 		if (!sessionId) return { ok: false };
 
-		const fromDb = await this.firebaseService.getInvoiceByHash({ sessionId, hash: parsedInvoice.hash });
-		if (fromDb.exists()) {
-			return { ok: true, resolved: { invoice: parsedInvoice.hash, ...fromDb.val() } };
-		}
+		// const fromDb = await this.firebaseService.getInvoiceByHash({ sessionId, hash: parsedInvoice.hash });
 
-		if (this.subs[parsedInvoice.hash] !== undefined) {
-			pushSub = this.subs[parsedInvoice.hash];
+		try {
+			const invoiceFromDb = await this.firebaseService.getInvoiceByHash(parsedInvoice.hash),
+				invoice = await invoiceFromDb.val();
 
-			if (pushSub.subs.indexOf(sub) == -1) {
-				pushSub.subs.push(sub);
+			if (invoiceFromDb.exists()) {
+				if (!invoice.subscribers.find(deviceToken)) {
+					invoice.subscribers.push(deviceToken);
+
+					this.firebaseService.setInvoiceSubscribersByHash(parsedInvoice.hash, [...invoice.subscribers]);
+				}
+
+				return { ok: true, resolved: { invoice: parsedInvoice.hash, ...invoice } };
 			}
-
-			// await this.saveState();
-			return { ok: true };
+		} catch (error) {
+			console.error(JSON.stringify(error));
 		}
+
+		// if (this.subs[parsedInvoice.hash] !== undefined) {
+		// 	pushSub = this.subs[parsedInvoice.hash];
+
+		// 	if (pushSub.subscribers.indexOf(deviceToken) == -1) {
+		// 		pushSub.subscribers.push(deviceToken);
+		// 	}
+
+		// 	// await this.saveState();
+
+		// 	return { ok: true };
+		// }
 
 		const expiration = new Date(Date.now() + 10 * 60000).toString();
 
@@ -215,7 +259,7 @@ export class OperationService {
 			invoice: parsedInvoice.invoice,
 			keys: parsedInvoice.keys,
 			expiration,
-			subs: [sub],
+			subscribers: [deviceToken],
 		};
 
 		this.subs[pushSub.hash] = pushSub;
@@ -232,6 +276,7 @@ export class OperationService {
 		}
 
 		// await this.saveState();
+
 		return { ok: true };
 	}
 
@@ -244,7 +289,7 @@ export class OperationService {
 		return this.ensureParsedContractToken(parsedContract, deviceToken);
 	}
 
-	async ensureInvoice(invoice: string, deviceToken: string) {
+	async ensureInvoiceToken(invoice: string, deviceToken: string) {
 		this.logger.debug(`ensureInvoiceSub(contract: ${invoice}, sub: ${deviceToken})`);
 
 		const invoiceHiBON = await HiBON.constructByBase64(invoice),
@@ -256,21 +301,19 @@ export class OperationService {
 	async notifyInvoiceTokenContractSent(parsedContract: Contract) {
 		this.logger.debug(`notifyInvoiceTokenContractSent(parsedContract: ${JSON.stringify(parsedContract)})`);
 
-		for (let i = 0; i < parsedContract.out.length; i++) {
-			const key = parsedContract.out[i];
-			const subHashes = this.keys[key];
+		for (let publicOutput of parsedContract.out) {
+			const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutput),
+				publicKey = await publicKeyFromDb.val();
 
-			for (let h = 0; h < subHashes.length; h++) {
-				const subHash = subHashes[h];
-				const sub = this.subs[subHash];
+			for (let contractHash of publicKey.contracts) {
+				const contractFromDb = await this.firebaseService.getContractByHash(contractHash),
+					contract = await contractFromDb.val();
 
-				if (sub !== undefined && sub.invoice) {
-					for (let s = 0; s < sub.subs.length; s++) {
-						const subToken = sub.subs[s];
-
-						const messagingResponse = await this.pushService.sendToDevice(subToken, {
+				if (contractFromDb.exists() && !!contract.invoice) {
+					for (let subscriber of contract.subscribers) {
+						const messagingResponse = await this.pushService.sendToDevice(subscriber, {
 							type: FirebaseMessageTypes.InvoicePending,
-							invoice: sub.hash,
+							invoice: contract.hash,
 							amount: parsedContract.amount.toString(),
 						});
 
@@ -279,5 +322,29 @@ export class OperationService {
 				}
 			}
 		}
+
+		// for (let i = 0; i < parsedContract.out.length; i++) {
+		// 	const key = parsedContract.out[i];
+		// 	const subHashes = this.keys[key];
+
+		// 	for (let h = 0; h < subHashes.length; h++) {
+		// 		const subHash = subHashes[h];
+		// 		const sub = this.subs[subHash];
+
+		// 		if (sub !== undefined && sub.invoice) {
+		// 			for (let s = 0; s < sub.subscribers.length; s++) {
+		// 				const subToken = sub.subscribers[s];
+
+		// 				const messagingResponse = await this.pushService.sendToDevice(subToken, {
+		// 					type: FirebaseMessageTypes.InvoicePending,
+		// 					invoice: sub.hash,
+		// 					amount: parsedContract.amount.toString(),
+		// 				});
+
+		// 				this.logger.log(JSON.stringify(messagingResponse));
+		// 			}
+		// 		}
+		// 	}
+		// }
 	}
 }

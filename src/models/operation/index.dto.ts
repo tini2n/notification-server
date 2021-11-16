@@ -29,14 +29,14 @@ export interface PushSub {
 	keys: string[];
 	in?: string[];
 	out?: string[];
-	subs: string[];
+	subscribers: string[];
 	expiration: string;
 }
 
 export interface ParsedContract {
 	hash: string;
 	contract: string;
-	amount: number;
+	amount?: number;
 	in: string[];
 	out: string[];
 }

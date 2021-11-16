@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as firebase from 'firebase-admin';
 
-import { FIREBASE_DB_URL_DEV, FIREBASE_DB_URL_PROD, FIREBASE_CREDS_FILE } from 'src/common/constants';
+import { FB_REALTIME_DB, FIREBASE_CREDS_FILE } from 'src/common/constants';
 
 import {
 	FirebaseContractPayload,
@@ -17,7 +17,8 @@ const serviceAccountCredentials = JSON.parse(
 		fs.readFileSync(FIREBASE_CREDS_FILE).toString(), // INFO: Download firebase credentials (ask admin)
 	),
 	firebaseCredential = firebase.credential.cert(serviceAccountCredentials),
-	databaseURL = process.env.NODE_ENV === 'production' ? FIREBASE_DB_URL_PROD : FIREBASE_DB_URL_DEV;
+	// databaseURL = process.env.NODE_ENV === 'production' ? FIREBASE_DB_URL_PROD : FIREBASE_DB_URL_DEV;
+	databaseURL = FB_REALTIME_DB;
 
 @Injectable()
 export class FirebaseService {
@@ -25,6 +26,8 @@ export class FirebaseService {
 		credential: firebaseCredential,
 		databaseURL,
 	});
+
+	readonly db = this.firebaseApp.database();
 
 	async sendMessageToDevice(
 		token: string,
@@ -42,12 +45,37 @@ export class FirebaseService {
 		});
 	}
 
-	async getContractByHash({ sessionId, hash }: FirebaseContractPayload) {
-		// todo: refactor types
-		return this.firebaseApp.database().ref(`${sessionId}/contracts/${hash}`).get();
+	async setPublicKeyContractsByHash(hash: string, payload: Array<string>) {
+		return await this.db.ref(`public-keys/${hash}/contracts`).set(payload);
 	}
 
-	async getInvoiceByHash({ sessionId, hash }: FirebaseInvoicePayload) {
-		return this.firebaseApp.database().ref(`${sessionId}/invoices/${hash}`).get();
+	async setPublicKeyByHash(hash: string, payload: { contracts?: Array<string>; invoices?: Array<string> }) {
+		return await this.db.ref(`public-keys/${hash}`).set(payload);
+	}
+
+	async getPublicKeyByHash(hash: string) {
+		return await this.db.ref(`public-keys/${hash}`).get();
+	}
+
+	async getContractByHash(hash: string) {
+		// todo: refactor types
+		return await this.db.ref(`contracts/${hash}`).get();
+	}
+
+	async setContractSubscribersByHash(hash: string, payload: Array<string>) {
+		return await this.db.ref(`contracts/${hash}/subscribers`).set(payload);
+	}
+
+	async setContractByHash(hash: string, payload) {
+		// todo: add model
+		return await this.db.ref(`contracts/${hash}`).set(payload);
+	}
+
+	async getInvoiceByHash(hash: string) {
+		return await this.db.ref(`invoices/${hash}`).get();
+	}
+
+	async setInvoiceSubscribersByHash(hash: string, payload: Array<string>) {
+		return await this.db.ref(`invoices/${hash}/subscribers`).set(payload);
 	}
 }

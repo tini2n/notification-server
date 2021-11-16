@@ -1,5 +1,5 @@
 import { HiBON } from '.';
-import { caclHash } from 'src/common/helpers';
+import { calcHash } from 'src/common/helpers';
 
 export class Invoice {
 	hash: string;
@@ -9,7 +9,7 @@ export class Invoice {
 	constructor(hibon: HiBON) {
 		try {
 			this.invoice = hibon.base64;
-			this.hash = caclHash(hibon.buffer);
+			this.hash = calcHash(hibon.buffer);
 			this.keys = [hibon.data[0]['pkey'][1]];
 		} catch (error) {
 			throw new Error(`Failed to parse invoice: ${JSON.stringify(error)}`);

@@ -14,7 +14,7 @@ export const execPromise = async (command: string): Promise<string> => {
 	});
 };
 
-export  const caclHash = (value: Buffer) => {
+export  const calcHash = (value: Buffer) => {
    const shasum = crypto.createHash('sha1');
 
    shasum.update(value);
