@@ -30,6 +30,17 @@ export class OperationController {
 		}
 	}
 
+	@Post('sub')
+	async subscribeDevice(@Body() body: { deviceToken: string }) {
+		const { deviceToken } = body;
+
+		try {
+			return await this.operationService.subscribeDevice({ deviceToken });
+		} catch (error) {
+			return { ok: false, error: JSON.stringify(error) };
+		}
+	}
+
 	@Post('sub/contracts')
 	async ensureContracts(
 		@Body() body: { contracts: string[]; deviceToken: string },

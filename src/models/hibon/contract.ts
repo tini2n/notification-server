@@ -1,4 +1,6 @@
+import { Database } from 'src/models/database';
 import { HiBON } from '.';
+
 import { calcHash } from 'src/common/helpers';
 
 export class Contract {
@@ -26,4 +28,6 @@ export class Contract {
 	}
 
 	construct(buffer: Buffer) {}
+
+	static async getDBEntity(hash: string) {}
 }

@@ -41,7 +41,8 @@ export class OperationService {
 
 		try {
 			for (let publicInput of parsedContract.in) {
-				const contractFromDb = await this.firebaseService.getPublicKeyByHash(publicInput);
+				const publicInputHash = encodeURIComponent(publicInput);
+				const contractFromDb = await this.firebaseService.getPublicKeyByHash(publicInputHash);
 
 				if (contractFromDb.exists()) {
 					response.inputsUsed = true;
@@ -50,12 +51,13 @@ export class OperationService {
 				}
 			}
 		} catch (error) {
-			console.error(JSON.stringify(error));
+			console.error(error);
 		}
 
 		try {
 			for (let publicOutput of parsedContract.out) {
-				const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutput),
+				const publicOutputHash = encodeURIComponent(publicOutput);
+				const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutputHash),
 					publicKey = await publicKeyFromDb.val();
 
 				if (publicKeyFromDb.exists()) {
@@ -72,7 +74,7 @@ export class OperationService {
 				}
 			}
 		} catch (error) {
-			console.error(JSON.stringify(error));
+			console.error(error);
 		}
 
 		return response;
@@ -140,12 +142,14 @@ export class OperationService {
 				return { ok: true, resolved: { contract: parsedContract.hash, ...contract } };
 			}
 		} catch (error) {
-			console.error(JSON.stringify(error));
+			console.error(error);
 		}
 
+		// todo: Crypto hashing???
+
 		const contractKeys = [
-			...parsedContract.in.map((input) => calcHash(Buffer.from(input, 'base64'))),
-			...parsedContract.out.map((output) => calcHash(Buffer.from(output, 'base64'))),
+			...parsedContract.in.map((input) => encodeURIComponent(input)),
+			...parsedContract.out.map((output) => encodeURIComponent(output)),
 		];
 
 		try {
@@ -179,7 +183,11 @@ export class OperationService {
 			console.error(JSON.stringify(error));
 		}
 
-		await this.notifyInvoiceTokenContractSent(parsedContract);
+		try {
+			await this.notifyInvoiceTokenContractSent(parsedContract);
+		} catch (error) {
+			console.error(JSON.stringify(error));
+		}
 
 		return { ok: true, existedBefore: false };
 	}
@@ -218,7 +226,8 @@ export class OperationService {
 			subscribers: [deviceToken],
 		});
 
-		for (let publicKeyHash of parsedInvoice.keys) {
+		for (let publicKey of parsedInvoice.keys) {
+			const publicKeyHash = encodeURIComponent(publicKey);
 			const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicKeyHash);
 
 			if (publicKeyFromDb.exists()) {
@@ -260,7 +269,8 @@ export class OperationService {
 		this.logger.debug(`notifyInvoiceTokenContractSent(parsedContract: ${JSON.stringify(parsedContract)})`);
 
 		for (let publicOutput of parsedContract.out) {
-			const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutput),
+			const publicOutputHash = encodeURIComponent(publicOutput);
+			const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutputHash),
 				publicKey = await publicKeyFromDb.val();
 
 			for (let contractHash of publicKey.contracts) {
@@ -280,5 +290,11 @@ export class OperationService {
 				}
 			}
 		}
+	}
+
+	async subscribeDevice({ deviceToken }) {
+		this.logger.debug(`subscribeDevice(subscriber: ${deviceToken})`);
+		
+		return { ok: true };
 	}
 }

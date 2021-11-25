@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 import * as fs from 'fs';
 import * as firebase from 'firebase-admin';
+import { getMessaging } from 'firebase-admin/messaging';
+import { getDatabase } from 'firebase-admin/database';
 
 import { FB_REALTIME_DB, FIREBASE_CREDS_FILE } from 'src/common/constants';
 
@@ -19,17 +21,14 @@ const serviceAccountCredentials = JSON.parse(
 		fs.readFileSync(FIREBASE_CREDS_FILE).toString(), // INFO: Download firebase credentials (ask admin)
 	),
 	firebaseCredential = firebase.credential.cert(serviceAccountCredentials),
-	// databaseURL = process.env.NODE_ENV === 'production' ? FIREBASE_DB_URL_PROD : FIREBASE_DB_URL_DEV;
 	databaseURL = FB_REALTIME_DB;
+// databaseURL = process.env.NODE_ENV === 'production' ? FIREBASE_DB_URL_PROD : FIREBASE_DB_URL_DEV;
 
 @Injectable()
 export class FirebaseService {
-	readonly firebaseApp = firebase.initializeApp({
-		credential: firebaseCredential,
-		databaseURL,
-	});
-
-	readonly db = this.firebaseApp.database();
+	readonly app = firebase.initializeApp({ credential: firebaseCredential, databaseURL });
+	readonly db = getDatabase(this.app);
+	readonly messaging = getMessaging(this.app);
 
 	async sendMessageToDevice(
 		token: string,
@@ -41,7 +40,7 @@ export class FirebaseService {
 			data: FirebaseDataMessagePayload;
 		},
 	) {
-		return await firebase.messaging(this.firebaseApp).sendToDevice(token, {
+		return await this.messaging.sendToDevice(token, {
 			notification,
 			data,
 		});
@@ -65,7 +64,7 @@ export class FirebaseService {
 
 	async getContractByHash(hash: string) {
 		// todo: refactor types
-		return await this.db.ref(`contracts/${hash}`).get();
+		return this.db.ref(`contracts/${hash}`).get();
 	}
 
 	async setContractSubscribersByHash(hash: string, payload: Array<string>) {
@@ -82,12 +81,11 @@ export class FirebaseService {
 	}
 
 	async setInvoiceSubscribersByHash(hash: string, payload: Array<string>) {
-		return await this.db.ref(`invoices/${hash}/subscribers`).set(payload);
+		return this.db.ref(`invoices/${hash}/subscribers`).set(payload);
 	}
 
 	async setInvoiceByHash(hash: string, payload) {
 		// todo: add model
-
 		return await this.db.ref(`invoices/${hash}`).set(payload);
 	}
 }
