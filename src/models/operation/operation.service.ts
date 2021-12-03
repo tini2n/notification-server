@@ -4,6 +4,8 @@ import { calcHash } from 'src/common/helpers';
 
 import { PushService } from 'src/models/push';
 import { FirebaseService } from 'src/models/firebase';
+import { NetworkService } from 'src/models/network';
+import { StorageService } from 'src/models/storage';
 
 import { HiBON, Contract, Invoice } from 'src/models/hibon';
 
@@ -16,6 +18,8 @@ export class OperationService {
 	constructor(
 		private readonly pushService: PushService,
 		private readonly firebaseService: FirebaseService,
+		private readonly storageService: StorageService,
+		private readonly networkService: NetworkService,
 		private readonly logger: Logger,
 	) {}
 
@@ -41,10 +45,9 @@ export class OperationService {
 
 		try {
 			for (let publicInput of parsedContract.in) {
-				const publicInputHash = encodeURIComponent(publicInput);
-				const contractFromDb = await this.firebaseService.getPublicKeyByHash(publicInputHash);
+				const { exist } = await this.storageService.withPublicKey(publicInput);
 
-				if (contractFromDb.exists()) {
+				if (exist) {
 					response.inputsUsed = true;
 
 					break;
@@ -56,20 +59,21 @@ export class OperationService {
 
 		try {
 			for (let publicOutput of parsedContract.out) {
-				const publicOutputHash = encodeURIComponent(publicOutput);
-				const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicOutputHash),
-					publicKey = await publicKeyFromDb.val();
+				const { entity: publicKeyEntity = { contracts: [] } } = await this.storageService.withPublicKey(
+					publicOutput,
+				);
 
-				if (publicKeyFromDb.exists()) {
-					for (let contractHash of publicKey.contracts) {
-						const contractFromDb = await this.firebaseService.getContractByHash(contractHash),
-							contractVal = await contractFromDb.val();
+				//todo: Merge this into storage service
 
-						if (contractVal.contract) {
-							response.outputsUsed = true;
+				for (let contractHash of publicKeyEntity.contracts) {
+					const { entity: contractEntity = { contract: null } } = await this.storageService.withContract(
+						contractHash,
+					);
 
-							break;
-						}
+					if (contractEntity.contract) {
+						response.outputsUsed = true;
+
+						break;
 					}
 				}
 			}
@@ -92,13 +96,10 @@ export class OperationService {
 		}
 
 		try {
-			// todo: Buffer type
-			// const response = await this.devtoolService.sendHiRPC(
-			// 	Buffer.from(contract, 'base64'),
-			// 	// this.tagionwaveService.latestNetworkInfo.nodes[0].port,
-			// 	3000, // mock tagionwave latestNetworkInfo node port
-			// );
-			const response: Buffer = Buffer.from(contract, 'base64');
+			const contractHiBON = await HiBON.constructByBase64(contract);
+
+			const response = await this.networkService.sendHiRPC(contractHiBON.buffer);
+
 			const resp = {
 				mockedResponse: 'somestring',
 			};
@@ -294,7 +295,13 @@ export class OperationService {
 
 	async subscribeDevice({ deviceToken }) {
 		this.logger.debug(`subscribeDevice(subscriber: ${deviceToken})`);
-		
+
+		this.pushService.sendToDevice(deviceToken, {
+			type: FirebaseMessageTypes.InvoicePending,
+			invoice: 'invoice hash',
+			amount: '50',
+		});
+
 		return { ok: true };
 	}
 }

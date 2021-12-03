@@ -1,4 +1,3 @@
-import { Database } from 'src/models/database';
 import { HiBON } from '.';
 
 import { calcHash } from 'src/common/helpers';

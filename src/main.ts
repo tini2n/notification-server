@@ -16,7 +16,8 @@ const logFormat = winston.format.printf(function (info) {
 
 class Server {
 	logLevel = process.env.LOG_LEVEL || 'info';
-
+	
+	
 	async run() {
 		const logFileConfig = {
 			filename: `logs_from_${timestamp()}.txt`,

@@ -7,22 +7,11 @@ import { getDatabase } from 'firebase-admin/database';
 
 import { FB_REALTIME_DB, FIREBASE_CREDS_FILE } from 'src/common/constants';
 
-import { Contract } from 'src/models/hibon/contract';
+import { FirebaseDataMessagePayload, FirebaseNotification, FirebaseMessageTypes } from './index.dto';
 
-import {
-	FirebaseContractPayload,
-	FirebaseInvoicePayload,
-	FirebaseDataMessagePayload,
-	FirebaseNotification,
-	FirebaseMessageTypes,
-} from './index.dto';
-
-const serviceAccountCredentials = JSON.parse(
-		fs.readFileSync(FIREBASE_CREDS_FILE).toString(), // INFO: Download firebase credentials (ask admin)
-	),
+const serviceAccountCredentials = JSON.parse(fs.readFileSync(FIREBASE_CREDS_FILE).toString()),
 	firebaseCredential = firebase.credential.cert(serviceAccountCredentials),
 	databaseURL = FB_REALTIME_DB;
-// databaseURL = process.env.NODE_ENV === 'production' ? FIREBASE_DB_URL_PROD : FIREBASE_DB_URL_DEV;
 
 @Injectable()
 export class FirebaseService {
