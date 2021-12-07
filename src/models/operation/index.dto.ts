@@ -12,14 +12,14 @@ export interface SendContractResponse {
 	ok: boolean;
 	error?: string;
 	existedBefore?: boolean;
-	resolved?: ParsedContract;
+	resolved?: Contract;
 }
 
 export interface EnsureContractsResponse {
 	ok: boolean;
 	error?: string;
 	existedBefore?: boolean;
-	resolved?: ParsedContract[];
+	resolved?: Contract[];
 }
 
 export interface PushSub {

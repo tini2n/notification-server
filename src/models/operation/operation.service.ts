@@ -45,7 +45,7 @@ export class OperationService {
 
 		try {
 			for (let publicInput of parsedContract.in) {
-				const { exist } = await this.storageService.withPublicKey(publicInput);
+				const { exist } = await this.storageService.getPublicKey(publicInput);
 
 				if (exist) {
 					response.inputsUsed = true;
@@ -54,31 +54,21 @@ export class OperationService {
 				}
 			}
 		} catch (error) {
-			console.error(error);
+			console.error(JSON.stringify(error));
 		}
 
 		try {
 			for (let publicOutput of parsedContract.out) {
-				const { entity: publicKeyEntity = { contracts: [] } } = await this.storageService.withPublicKey(
-					publicOutput,
-				);
+				const isUsed = await this.storageService.publicKeyWithContract(publicOutput);
 
-				//todo: Merge this into storage service
+				if (isUsed) {
+					response.outputsUsed = true;
 
-				for (let contractHash of publicKeyEntity.contracts) {
-					const { entity: contractEntity = { contract: null } } = await this.storageService.withContract(
-						contractHash,
-					);
-
-					if (contractEntity.contract) {
-						response.outputsUsed = true;
-
-						break;
-					}
+					break;
 				}
 			}
 		} catch (error) {
-			console.error(error);
+			console.error(JSON.stringify(error));
 		}
 
 		return response;
@@ -98,7 +88,7 @@ export class OperationService {
 		try {
 			const contractHiBON = await HiBON.constructByBase64(contract);
 
-			const response = await this.networkService.sendHiRPC(contractHiBON.buffer);
+			// const response = await this.networkService.sendHiRPC(contractHiBON.buffer);
 
 			const resp = {
 				mockedResponse: 'somestring',
@@ -122,28 +112,17 @@ export class OperationService {
 		);
 
 		// const sessionId = this.tagionwaveService.latestNetworkInfo?.sessionId;
-		const sessionId = '94a191fe-25bc-11ec-9621-0242ac130002'; // mock tagionwave latestNetworkInfo session id
-
-		if (!sessionId) return { ok: false };
+		// const sessionId = '94a191fe-25bc-11ec-9621-0242ac130002'; // mock tagionwave latestNetworkInfo session id
+		// if (!sessionId) return { ok: false };
 
 		try {
-			const contractFromDb = await this.firebaseService.getContractByHash(parsedContract.hash),
-				contract = await contractFromDb.val();
+			const response = await this.storageService.addContractSubscriber(parsedContract.hash, deviceToken);
 
-			if (contractFromDb.exists()) {
-				if (!contract.subscribers.find((d) => d === deviceToken)) {
-					await this.firebaseService.setContractSubscribersByHash(parsedContract.hash, [
-						...contract.subscribers,
-						deviceToken,
-					]);
+			!!response && this.logger.debug(`addContractSubscriber(response: ${JSON.stringify(response)})`);
 
-					return { ok: true, existedBefore: true };
-				}
-
-				return { ok: true, resolved: { contract: parsedContract.hash, ...contract } };
-			}
+			if (response.existedBefore) return response;
 		} catch (error) {
-			console.error(error);
+			console.error(JSON.stringify(error));
 		}
 
 		// todo: Crypto hashing???
@@ -154,31 +133,21 @@ export class OperationService {
 		];
 
 		try {
-			await this.firebaseService.setContractByHash(parsedContract.hash, {
+			await this.storageService.addContract(parsedContract.hash, {
 				...parsedContract,
 				keys: contractKeys,
 				expiration: new Date(Date.now() + 10 * 60000).toString(),
 				subscribers: [deviceToken],
 			});
+
+			this.logger.debug(`addContract(hash: ${parsedContract.hash})`);
 		} catch (error) {
 			console.error(JSON.stringify(error));
 		}
 
 		try {
 			for (let publicKey of contractKeys) {
-				const publicKeyFromDb = await this.firebaseService.getPublicKeyByHash(publicKey),
-					publicKeyValue = await publicKeyFromDb.val();
-
-				if (publicKeyFromDb.exists()) {
-					if (!publicKeyValue.contracts.find((h) => h === parsedContract.hash)) {
-						await this.firebaseService.setPublicKeyContractsByHash(publicKey, [
-							...publicKeyValue.contracts,
-							parsedContract.hash,
-						]);
-					}
-				} else {
-					await this.firebaseService.setPublicKeyByHash(publicKey, { contracts: [parsedContract.hash] });
-				}
+				await this.storageService.addPublicKeyContract(publicKey, parsedContract.hash);
 			}
 		} catch (error) {
 			console.error(JSON.stringify(error));
@@ -199,9 +168,8 @@ export class OperationService {
 		);
 
 		// const sessionId = this.tagionwaveService.latestNetworkInfo?.sessionId;
-		const sessionId = '94a191fe-25bc-11ec-9621-0242ac130002'; // mock tagionwave latestNetworkInfo session id
-
-		if (!sessionId) return { ok: false };
+		// const sessionId = '94a191fe-25bc-11ec-9621-0242ac130002'; // mock tagionwave latestNetworkInfo session id
+		// if (!sessionId) return { ok: false };
 
 		try {
 			const invoiceFromDb = await this.firebaseService.getInvoiceByHash(parsedInvoice.hash),

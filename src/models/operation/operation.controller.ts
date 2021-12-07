@@ -2,6 +2,7 @@ import { Controller, Body, Post } from '@nestjs/common';
 
 import { OperationService } from './operation.service';
 import { EnsureContractsResponse, ParsedContract, CheckContractResponse, SendContractResponse } from './index.dto';
+import { Contract } from '../hibon';
 
 @Controller('operation')
 export class OperationController {
@@ -49,7 +50,7 @@ export class OperationController {
 		// if (!this.operationService.sessionAvailable) return this.operationService.sessionUnavailableError;
 
 		try {
-			const resolved: ParsedContract[] = [];
+			const resolved: Contract[] = [];
 
 			for (let i = 0; i < contracts.length; i++) {
 				const response = await this.operationService.ensureContractToken(contracts[i], deviceToken);
